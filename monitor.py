@@ -3,6 +3,8 @@ import requests
 import time
 import smtplib
 
+import utils
+
 import os
 
 # email sending function
@@ -31,7 +33,7 @@ def email_sender(input_message, email_to, client):
 clients = {"http://localhost:8080": "some_dummy_email@gmail.com"}
 
 # temporary dictionary used to do separate monitoring when a site is down
-temp_dic = {}
+sites_down_now = {}
 
 # site 'up' function
 
@@ -39,22 +41,27 @@ temp_dic = {}
 def site_up():
     ''' function to monitor up time '''
     while True:
-        for client, email in clients.items():
+        clients_copy = clients
+        for client, email in clients_copy.items():
             try:
                 r = requests.get(client)
                 if r.status_code == 200:
                     print(client, 'Site ok')
-                    time.sleep(60)  # sleep for 1 min
                 else:
                     print(
                         client, 'Site first registered as down - added to the "site down" monitoring')
-                    temp_dic[client] = email
-                    del clients[client]
+                    sites_down_now[client] = email
             except requests.ConnectionError:
                 print(
                     client, 'Site first registered as down - added to the "site down" monitoring')
-                temp_dic[client] = email
-                del clients[client]
+                sites_down_now[client] = email
+
+        
+        time.sleep(5)  # sleep for 1 min
+
+        for key in sites_down_now.keys():
+            clients_copy = utils.delete_key_from_dict(clients, key)
+
 
 # site 'down' function
 
@@ -62,21 +69,21 @@ def site_up():
 def site_down():
     ''' function to monitor site down time '''
     while True:
-        time.sleep(900)  # sleeps 15 mins
-        for client, email in temp_dic.items():
+        for client, email in sites_down_now.items():
             try:
                 r = requests.get(client)
                 if r.status_code == 200:
                     print(client, 'Site is back up!!')
                     email_sender('Site back up!! ', email, client)
                     clients[client] = email
-                    del temp_dic[client]
+                    del sites_down_now[client]
                 else:
                     email_sender('Site down!! ', email, client)
                     print(client, 'Site Currently down - email sent')
             except requests.ConnectionError:
                 email_sender('Site down!! ', email, client)
                 print(client, 'Site Currently down - email sent')
+        time.sleep(10)  # sleeps 15 mins
 
 
 t1 = Thread(target=site_up)
